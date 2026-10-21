@@ -59,7 +59,12 @@ export function buildRequest(doc: Doc, model: string, strict = true, send: Send 
     }
     state = ctx.length ? (v && typeof v === 'object' && !Array.isArray(v) ? { ...v, context: ctx } : { state: v, context: ctx }) : v;
   } else state = doc.state + ctx.map((c) => `\n\n--- ${c.title} ---\n${c.text}`).join('');
-  if (strict && (state == null || state === '')) throw new RequestError('Add some input first.');
+  // Media alone is a valid input: the state may be empty when there is an image or video for the model to read.
+  const hasMedia = doc.media.some((m) => send[m.kind] !== false);
+  if (state == null || state === '') {
+    if (strict && !hasMedia) throw new RequestError('Add an input, an image or a file first.');
+    state = '';
+  }
   req.state = state;
 
   const questions: Record<string, unknown> = {};

@@ -52,7 +52,11 @@ describe('buildRequest', () => {
   it('validates when strict', () => {
     const d = doc();
     d.state = '';
-    expect(() => buildRequest(d, '')).toThrow(RequestError);
+    expect(() => buildRequest(d, '')).toThrow(/Add an input/);
+    d.media = [{ id: 'a', kind: 'image', name: 'a', src: 'data:image/png;base64,AA' }];
+    expect(buildRequest(d, '').state).toBe(''); // an image alone is enough
+    expect(() => buildRequest(d, '', true, { ext: false, image: false, video: true })).toThrow(/Add an input/); // …unless the model can't read it
+    d.media = [];
     d.state = 'x';
     d.questions[0].options = [{ key: 'only', desc: '' }];
     expect(() => buildRequest(d, '')).toThrow(/two or more options/);
