@@ -2,6 +2,7 @@
   import { app, EXAMPLES } from '../lib/app.svelte';
   import { autosize } from '../lib/actions';
   import { bytes } from '../lib/util';
+  import { normTag } from '../lib/request';
   import Icon from './Icon.svelte';
   import WebPanel from './WebPanel.svelte';
 
@@ -9,6 +10,7 @@
   let web = $state(false);
   let picker: HTMLInputElement;
   let tagging = $state<string | null>(null);
+  const unread = (kind: 'image' | 'video') => app.caps[kind] === false;
 
   const isJson = $derived(app.doc.stateMode === 'json');
   const jsonBad = $derived.by(() => {
@@ -63,13 +65,15 @@
   {#if media.length || app.doc.contexts.length}
     <div class="attached">
       {#each media as m (m.id)}
-        <div class="thumb">
+        <div class="thumb" class:unread={unread(m.kind)} title={unread(m.kind) ? 'Not read by this model' : ''}>
           {#if m.kind === 'video'}<video src={m.src} muted preload="metadata"></video>{:else}<img src={m.src} alt={m.name} />{/if}
           <button class="rm" aria-label="Remove {m.name}" onclick={() => (app.doc.media = app.doc.media.filter((x) => x.id !== m.id))}><Icon name="x" size={12} /></button>
-          {#if tagging === m.id}
+          {#if !app.caps.ext}
+            <!-- tags need extensions: without them the file goes as a plain image -->
+          {:else if tagging === m.id}
             <!-- svelte-ignore a11y_autofocus -->
             <input class="tagin mono" placeholder="&lt;tag&gt;" value={m.tag ?? ''} autofocus
-              onblur={(e) => { m.tag = e.currentTarget.value.trim() || undefined; tagging = null; }}
+              onblur={(e) => { m.tag = e.currentTarget.value.trim() ? normTag(e.currentTarget.value) : undefined; tagging = null; }}
               onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
           {:else}
             <button class="tag mono" class:set={m.tag} title="Name it to use it as <tag> in a question" onclick={() => (tagging = m.id)}>
@@ -100,7 +104,7 @@
     </div>
     {#if app.pristine}
       <div class="examples">
-        {#each EXAMPLES as ex}<button onclick={() => app.loadExample(ex)}>{ex.name}</button>{/each}
+        {#each EXAMPLES.filter((x) => !x.ext || app.caps.ext) as ex}<button onclick={() => app.loadExample(ex)}>{ex.name}</button>{/each}
       </div>
     {/if}
   </div>
@@ -119,6 +123,7 @@
   .attached { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 4px; }
   .thumb { position: relative; width: 84px; height: 84px; border-radius: 12px; overflow: hidden; background: var(--sunken); border: 1px solid var(--line); }
   .thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.unread { opacity: 0.4; filter: grayscale(1); }
   .rm { position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: rgb(0 0 0 / 0.55); opacity: 0; transition: opacity 0.12s; }
   .thumb:hover .rm, .rm:focus-visible { opacity: 1; }
   .tag, .tagin { position: absolute; left: 5px; bottom: 5px; max-width: calc(100% - 10px); font-size: 11px; color: #fff; background: rgb(0 0 0 / 0.55); border-radius: 7px; padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; }

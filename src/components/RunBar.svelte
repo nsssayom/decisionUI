@@ -1,7 +1,9 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
-  import Icon from './Icon.svelte';
+  import { estimateTokens } from '../lib/request';
 
+  const est = $derived(estimateTokens(app.request));
+  const over = $derived(app.caps.maxTokens != null && est > app.caps.maxTokens);
   const meta = $derived.by(() => {
     const r = app.result;
     if (!r || app.running) return '';
@@ -15,7 +17,9 @@
     <div class="err" role="alert">{app.error}</div>
   {/if}
   <div class="cluster">
-    {#if meta}<span class="meta" class:stale={app.stale}>{meta}</span>{/if}
+    {#if over}
+      <span class="meta over" title="Text only. Over {app.caps.maxTokens?.toLocaleString()} tokens per question">~{est.toLocaleString()} tok, over the limit</span>
+    {:else if meta}<span class="meta" class:stale={app.stale}>{meta}</span>{/if}
     {#if app.running}
       <button class="go busy" onclick={() => app.stop()}><span class="spin"></span>Stop</button>
     {:else}
@@ -33,6 +37,7 @@
   .bar > * { pointer-events: auto; }
   .cluster { display: flex; align-items: center; gap: 14px; }
   .meta { color: var(--ink-3); font-size: 13px; font-variant-numeric: tabular-nums; transition: opacity 0.2s; }
+  .meta.over { color: var(--warn); }
   .meta.stale { opacity: 0.45; }
   .go {
     display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 26px; border-radius: 99px;

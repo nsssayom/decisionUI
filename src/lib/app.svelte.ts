@@ -1,7 +1,8 @@
 import * as api from './api';
 import { blankDoc, buildRequest, fromRequest, newQuestion, RequestError } from './request';
 import { EXAMPLES, type Example } from './examples';
-import type { Doc, Endpoint, QType, Response, Tools } from './types';
+import type { Caps, Doc, Endpoint, ModelInfo, QType, Response, Tools } from './types';
+import { isError } from './types';
 import { debounce, isDataUrl, load, readDataURL, store, uid } from './util';
 
 interface HistoryItem {
@@ -21,20 +22,29 @@ class App {
   endpoints = $state<Endpoint[]>([]);
   tools = $state<Tools>({ convert: true, convertAll: false, search: false, read: false });
   endpointId = $state<string>(load('dui.ep', ''));
-  models = $state<string[]>([]);
+  models = $state<ModelInfo[]>([]);
+  /** per endpoint: has the user (or a rejected request) said its server knows the extensions? */
+  ext = $state<Record<string, boolean>>(load('dui.ext', {}));
   model = $state<string>(load('dui.model', ''));
   status = $state<'idle' | 'busy' | 'ok' | 'bad'>('idle');
   statusText = $state('');
   running = $state(false);
   result = $state<{ resp: Response; ms: number; req: string } | null>(null);
   error = $state('');
+  qerrors = $state<Record<string, string>>({}); // question name → what the server said about it
   drawer = $state<null | 'request' | 'code' | 'history'>(null);
   theme = $state<'system' | 'light' | 'dark'>(load('dui.theme', 'system'));
   history = $state<HistoryItem[]>(load('dui.history', []));
   toastText = $state('');
 
   endpoint = $derived(this.endpoints.find((e) => e.id === this.endpointId) ?? null);
-  request = $derived(buildRequest(this.doc, this.model, false));
+  modelInfo = $derived(this.models.find((m) => m.id === this.model));
+  caps = $derived.by((): Caps => {
+    const m = this.modelInfo?.modalities;
+    const known = (k: string) => (m ? m.includes(k) : 'unknown' as const);
+    return { image: known('image'), video: known('video'), ext: !!this.ext[this.endpointId], maxTokens: this.modelInfo?.maxTokens };
+  });
+  request = $derived(buildRequest(this.doc, this.model, false, this.caps));
   stale = $derived(this.result ? JSON.stringify(this.request) !== this.result.req : false);
   pristine = $derived(!this.doc.state.trim() && !this.doc.media.length && !this.doc.contexts.length);
 
@@ -99,7 +109,7 @@ class App {
     this.statusText = '';
     try {
       this.models = await api.listModels(ep);
-      if (!this.models.includes(this.model)) this.model = this.models.find((m) => /d3|decision/i.test(m)) ?? this.models[0] ?? this.model;
+      if (!this.models.some((m) => m.id === this.model)) this.model = (this.models.find((m) => /d3|decision/i.test(m.id)) ?? this.models[0])?.id ?? this.model;
       store('dui.model', this.model);
       this.status = 'ok';
     } catch (e) {
@@ -108,6 +118,11 @@ class App {
       this.status = 'bad';
       this.statusText = s === 401 || s === 403 ? 'key rejected' : s ? `error ${s}` : 'unreachable';
     }
+  }
+
+  setExtensions(on: boolean): void {
+    this.ext = { ...this.ext, [this.endpointId]: on };
+    store('dui.ext', this.ext);
   }
 
   setModel(m: string): void {
@@ -131,6 +146,7 @@ class App {
     this.doc = ex.build();
     this.result = null;
     this.error = '';
+    this.qerrors = {};
   }
   addQuestion(type: QType): void {
     const n = Math.max(0, ...this.doc.questions.map((q) => Number(/^q(\d+)$/.exec(q.name)?.[1]) || 0)) + 1;
@@ -173,7 +189,7 @@ class App {
     if (this.running) return;
     let req: Record<string, unknown>;
     try {
-      req = buildRequest(this.doc, this.model, true);
+      req = buildRequest(this.doc, this.model, true, this.caps);
     } catch (e) {
       this.error = e instanceof RequestError ? e.message : String(e);
       return;
@@ -183,6 +199,7 @@ class App {
       return;
     }
     this.error = '';
+    this.qerrors = {};
     this.running = true;
     this.#abort = new AbortController();
     try {
@@ -190,7 +207,15 @@ class App {
       this.result = { resp: data, ms, req: JSON.stringify(this.request) };
       this.#remember(req, data, ms);
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') this.error = (e as Error).message;
+      if ((e as Error).name !== 'AbortError') {
+        const err = e as api.ApiError;
+        this.error = err.message;
+        this.qerrors = err.perQuestion ?? {};
+        if (this.caps.ext && api.blamesExtension(err)) {
+          this.setExtensions(false); // learn from the rejection instead of retrying silently
+          this.error = `This server doesn't accept extensions, so they are off now. ${err.message}`;
+        }
+      }
     } finally {
       this.running = false;
       this.#abort = null;
@@ -207,7 +232,7 @@ class App {
     for (const k of ['images', 'videos']) if (r[k]) r[k] = r[k].map(strip).filter(Boolean);
     if (r.assets) r.assets = Object.fromEntries(Object.entries(r.assets).map(([k, v]) => [k, strip(v)]).filter(([, v]) => v));
     const [name, a] = Object.entries(data.answers ?? {})[0] ?? [];
-    const brief = a ? `${name}: ${'choice' in a ? a.choice : 'noul' in a ? (a.noul >= 0.5 ? 'yes' : 'no') : 'score' in a ? a.score.toFixed(2) : a.type}` : '';
+    const brief = a ? `${name}: ${isError(a) ? 'error' : 'choice' in a ? a.choice : 'noul' in a ? (a.noul >= 0.5 ? 'yes' : 'no') : 'score' in a ? a.score.toFixed(2) : a.type}` : '';
     this.history = [{ t: Date.now(), endpoint: this.endpoint?.name, model: this.model, ms: Math.round(ms), req: r, mediaCut: cut, brief }, ...this.history].slice(0, 30);
     while (this.history.length && !store('dui.history', this.history)) this.history.pop();
   }

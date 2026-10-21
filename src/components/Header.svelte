@@ -57,11 +57,17 @@
 
         {#if app.models.length}
           <div class="group models">
-            {#each app.models as m}
-              <button class="row" class:on={m === app.model} onclick={() => { app.setModel(m); open = false; }}>
-                <span class="name mono">{m}</span>{#if m === app.model}<span class="tick"><Icon name="check" size={15} /></span>{/if}
+            {#each app.models as m (m.id)}
+              <button class="row" class:on={m.id === app.model} onclick={() => { app.setModel(m.id); open = false; }}>
+                <span class="name mono">{m.id}</span>{#if m.id === app.model}<span class="tick"><Icon name="check" size={15} /></span>{/if}
               </button>
             {/each}
+          </div>
+          <div class="group">
+            <label class="row sw" title="Box, track, tagged images and long context. Turn on only if this server knows them: some ignore them silently, others reject the request.">
+              <span class="name">Extensions</span>
+              <input type="checkbox" checked={app.caps.ext} onchange={(e) => app.setExtensions(e.currentTarget.checked)} />
+            </label>
           </div>
         {:else if app.status === 'bad'}
           <div class="group"><div class="row err">{app.statusText}</div></div>
@@ -122,6 +128,8 @@
   .new { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
   .new input { background: var(--sunken); border-radius: 9px; padding: 8px 10px; font-size: 14px; }
   .go { align-self: flex-end; padding: 6px 14px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 13.5px; }
+  .sw { cursor: pointer; }
+  .sw input { accent-color: var(--accent); width: 16px; height: 16px; }
   .tools { display: flex; gap: 2px; }
   .icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--ink-2); }
   .icon:hover { background: var(--sunken); color: var(--ink); }

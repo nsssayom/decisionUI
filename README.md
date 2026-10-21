@@ -9,7 +9,7 @@
 
 Decision models (d3, Clef, OpenJev, …) don't chat. You give them an input and questions, they return a probability for every option. decisionUI is a front end for that API, for any endpoint that speaks it.
 
-- **Question types:** choice, yes / no, score, box (find it in an image), track (follow it in a video)
+- **Question types:** choice, yes / no, score: the System One standard. **Extensions** (box, track, tagged images, long context) are d3-turbo features: flip *Extensions* in the endpoint menu only for a server that knows them. oMLX ignores them silently, strict servers reject them, so decisionUI never sends them otherwise.
 - **Input:** text or JSON, images, video, and named assets (`<tag>`) for questions and options
 - **Context:** drop in files (PDF, Office, text, code) or search the web; it lands in the input
 - **Any endpoint:** `POST /v1/systemone`, proxied by the server or called straight from the browser
@@ -50,7 +50,7 @@ POST /v1/systemone
 }
 ```
 
-`images`, `videos` and `assets` carry media as `data:` or http(s) URLs; `box` and `track` (with `rate`) questions answer about them. Anything else in the request, such as `long_context`, is passed through. See [vLLM Semantic Router](https://github.com/vllm-project/semantic-router) and [oMLX](https://github.com/jundot/omlx) for servers.
+`images`, `videos` and `assets` carry media as `data:` or http(s) URLs; With Extensions on, `box` and `track` (with `rate`) questions answer about them and `<tag>`ged media go as `assets`. Anything else in the request, such as `long_context`, is passed through. See [vLLM Semantic Router](https://github.com/vllm-project/semantic-router) and [oMLX](https://github.com/jundot/omlx) for servers.
 
 ## Develop
 

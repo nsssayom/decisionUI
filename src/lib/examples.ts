@@ -49,6 +49,7 @@ const score = (name: string, instructions: string, levels: string[]): Question =
 
 export interface Example {
   name: string;
+  ext?: boolean; // needs a server with extensions (box)
   build: () => Doc;
 }
 
@@ -86,6 +87,7 @@ export const EXAMPLES: Example[] = [
   },
   {
     name: 'Vision',
+    ext: true,
     build: () => ({
       ...blankDoc(),
       state: 'A test scene with coloured shapes.',

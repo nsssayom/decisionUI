@@ -1,44 +1,50 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
-  import { autosize, clickOutside } from '../lib/actions';
-  import { QLABEL, QTYPES, type Question } from '../lib/types';
+  import { autosize } from '../lib/actions';
+  import { CORE, EXT, isExt, LIMITS, QLABEL, type Question } from '../lib/types';
   import Icon from './Icon.svelte';
   import Answer from './Answer.svelte';
 
   let { q }: { q: Question } = $props();
-  let menu = $state(false);
+  let showSides = $state(false);
+  const sides = $derived(showSides || !!(q.sides.true || q.sides.false));
 
-  const answer = $derived(app.result?.resp.answers?.[q.name.trim()]);
+  const name = $derived(q.name.trim());
+  const answer = $derived(app.result?.resp.answers?.[name]);
+  const problem = $derived(app.qerrors[name] ?? '');
+  const types = $derived([...CORE, ...(app.caps.ext || isExt(q.type) ? EXT : [])]);
   const needs = $derived(
-    q.type === 'box' && !app.doc.media.some((m) => m.kind === 'image') ? 'Needs an image' : q.type === 'track' && !app.doc.media.some((m) => m.kind === 'video') ? 'Needs a video' : '',
+    isExt(q.type) && !app.caps.ext
+      ? 'Needs extensions'
+      : q.type === 'box' && !app.doc.media.some((m) => m.kind === 'image')
+        ? 'Needs an image'
+        : q.type === 'track' && !app.doc.media.some((m) => m.kind === 'video')
+          ? 'Needs a video'
+          : '',
   );
+  const hasVideo = $derived(app.doc.media.some((m) => m.kind === 'video'));
 
   function setType(t: Question['type']) {
     q.type = t;
     if (t === 'choice' && !q.options.length) q.options = [{ key: '', desc: '' }, { key: '', desc: '' }];
     if (t === 'score' && !q.levels.length) q.levels = ['', '', ''];
-    menu = false;
   }
 </script>
 
-<article class="q">
+<article class="q" class:bad={!!problem}>
   <header>
-    <div class="type" use:clickOutside={() => (menu = false)}>
-      <button class="glyph" title={QLABEL[q.type]} aria-label="Type: {QLABEL[q.type]}" aria-haspopup="true" onclick={() => (menu = !menu)}><Icon name={q.type} size={17} /></button>
-      {#if menu}
-        <div class="pop" role="menu">
-          {#each QTYPES as t}
-            <button role="menuitem" class:on={t === q.type} onclick={() => setType(t)}><Icon name={t} size={16} />{QLABEL[t]}</button>
-          {/each}
-        </div>
-      {/if}
+    <div class="seg types" role="group" aria-label="Question type">
+      {#each types as t}
+        <button class:on={t === q.type} title={QLABEL[t]} aria-label={QLABEL[t]} aria-pressed={t === q.type} onclick={() => setType(t)}><Icon name={t} size={15} /><span>{QLABEL[t]}</span></button>
+      {/each}
     </div>
     <input class="name mono" bind:value={q.name} placeholder="name" spellcheck="false" autocomplete="off" aria-label="Question name" />
     {#if needs}<span class="needs">{needs}</span>{/if}
     <button class="rm" aria-label="Remove question" title="Remove" onclick={() => app.removeQuestion(q.id)}><Icon name="x" size={16} /></button>
   </header>
 
-  <textarea rows="1" class="ask" placeholder="Question" bind:value={q.instructions} use:autosize={q.instructions} aria-label="Question"></textarea>
+  <textarea rows="1" class="ask" placeholder="Question (optional)" bind:value={q.instructions} use:autosize={q.instructions} aria-label="Question"></textarea>
+  {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
   {#if q.type === 'choice'}
     <div class="list">
@@ -51,6 +57,15 @@
       {/each}
       <button class="more" onclick={() => q.options.push({ key: '', desc: '' })}><Icon name="plus" size={14} />option</button>
     </div>
+  {:else if q.type === 'noul'}
+    {#if sides}
+      <div class="list">
+        <div class="opt"><span class="k mono">yes</span><input class="d" placeholder="meaning" bind:value={q.sides.true} spellcheck="false" aria-label="Meaning of yes" /></div>
+        <div class="opt"><span class="k mono">no</span><input class="d" placeholder="meaning" bind:value={q.sides.false} spellcheck="false" aria-label="Meaning of no" /></div>
+      </div>
+    {:else}
+      <button class="more" onclick={() => (showSides = true)}><Icon name="plus" size={14} />describe yes / no</button>
+    {/if}
   {:else if q.type === 'score'}
     <div class="list">
       {#each q.levels as l, i}
@@ -60,15 +75,21 @@
           <button aria-label="Remove level" onclick={() => q.levels.splice(i, 1)}><Icon name="x" size={14} /></button>
         </div>
       {/each}
-      <button class="more" onclick={() => q.levels.push('')}><Icon name="plus" size={14} />level</button>
+      {#if q.levels.length < LIMITS.levels[1]}
+        <button class="more" onclick={() => q.levels.push('')}><Icon name="plus" size={14} />level</button>
+      {:else}<span class="hint">{LIMITS.levels[1]} levels max</span>{/if}
     </div>
   {:else if q.type === 'track'}
     <div class="seg" role="group" aria-label="Updates per second">
       {#each [1, 2] as r}<button class:on={q.rate === r} onclick={() => (q.rate = r as 1 | 2)}>{r}/s</button>{/each}
     </div>
+  {:else if q.type === 'box' && hasVideo}
+    <label class="at">at <input type="number" min="0" step="0.1" bind:value={q.at} placeholder="0" aria-label="Moment in the video, in seconds" /> s</label>
   {/if}
 
-  {#if answer}
+  {#if app.running}
+    <div class="ans skel" aria-hidden="true"><i></i><i></i><i></i></div>
+  {:else if answer}
     <div class="ans" class:stale={app.stale}><Answer {answer} /></div>
   {/if}
 </article>
@@ -76,14 +97,21 @@
 <style>
   .q { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 14px 18px 16px; }
   header { display: flex; align-items: center; gap: 8px; margin: 0 -6px 4px -6px; }
-  .type { position: relative; }
-  .glyph { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); transition: filter 0.12s; }
-  .glyph:hover { filter: brightness(0.96); }
-  .pop { position: absolute; left: 0; top: 38px; z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 5px; min-width: 150px; animation: in 0.1s ease-out; }
-  @keyframes in { from { opacity: 0; transform: translateY(-3px); } }
-  .pop button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--ink-2); }
-  .pop button:hover { background: var(--sunken); color: var(--ink); }
-  .pop button.on { color: var(--accent); }
+  .q .types { margin-top: 0; padding: 2px; }
+  .types button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; color: var(--ink-3); }
+  .types button.on { color: var(--accent); }
+  .types span { display: none; }
+  .types button.on span { display: inline; }
+  .q.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+  .problem { margin: 6px 0 0; font-size: 13.5px; color: var(--bad); }
+  .hint { align-self: flex-start; margin-top: 4px; font-size: 12.5px; color: var(--ink-3); }
+  .at { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--ink-3); }
+  .at input { width: 64px; padding: 3px 8px; border-radius: 8px; background: var(--sunken); font-size: 13px; }
+  .skel { display: flex; flex-direction: column; gap: 9px; }
+  .skel i { display: block; height: 10px; border-radius: 99px; background: var(--sunken); animation: pulse 1.1s ease-in-out infinite; }
+  .skel i:nth-child(1) { width: 40%; height: 18px; }
+  .skel i:nth-child(3) { width: 70%; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
   .name { flex: 1; font-size: 13.5px; color: var(--ink-2); min-width: 0; }
   .name:focus { color: var(--ink); }
   .needs { font-size: 12.5px; color: var(--warn); white-space: nowrap; }

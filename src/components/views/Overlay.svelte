@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Box } from '../../lib/types';
-  let { src, box, label = '' }: { src: string; box: Box; label?: string } = $props();
+  let { src, box, label = '', faint = false }: { src: string; box: Box; label?: string; faint?: boolean } = $props();
   let img: HTMLImageElement;
   let cv: HTMLCanvasElement;
 
@@ -12,9 +12,11 @@
     const w = cv.width;
     const x = box.left * w, y = box.top * cv.height, bw = (box.right - box.left) * w, bh = (box.bottom - box.top) * cv.height;
     const c = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b5bf0';
+    g.globalAlpha = faint ? 0.55 : 1;
     g.fillStyle = c + '22';
     g.fillRect(x, y, bw, bh);
     g.lineWidth = Math.max(3, w / 180);
+    if (faint) g.setLineDash([w / 60, w / 100]);
     g.strokeStyle = c;
     g.strokeRect(x, y, bw, bh);
     if (label) {
@@ -27,7 +29,7 @@
       g.fillText(label, x + 7, Math.max(th - 8, y - 8));
     }
   }
-  $effect(() => { box; label; src; draw(); });
+  $effect(() => { box; label; src; faint; draw(); });
 </script>
 
 <div class="stage">

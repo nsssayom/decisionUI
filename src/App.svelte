@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { app } from './lib/app.svelte';
-  import { QTYPES, QLABEL } from './lib/types';
+  import { CORE, EXT, QLABEL } from './lib/types';
   import Header from './components/Header.svelte';
   import InputCard from './components/InputCard.svelte';
   import QuestionCard from './components/QuestionCard.svelte';
@@ -39,7 +39,7 @@
   </section>
 
   <div class="add" role="group" aria-label="Add a question">
-    {#each QTYPES as t}
+    {#each app.caps.ext ? [...CORE, ...EXT] : CORE as t}
       <button onclick={() => app.addQuestion(t)}><Icon name={t} size={15} />{QLABEL[t]}</button>
     {/each}
   </div>

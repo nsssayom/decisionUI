@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Answer } from '../../lib/types';
+  import type { AnswerOk } from '../../lib/types';
   import { clamp } from '../../lib/util';
-  let { src, track }: { src: string; track: Extract<Answer, { type: 'track' }>['track'] } = $props();
+  let { src, track }: { src: string; track: Extract<AnswerOk, { type: 'track' }>['track'] } = $props();
   let video: HTMLVideoElement;
   let cv: HTMLCanvasElement;
   let raf = 0;
