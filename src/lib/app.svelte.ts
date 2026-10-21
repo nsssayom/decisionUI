@@ -4,9 +4,9 @@ import { EXAMPLES, type Example } from './examples';
 import type { Caps, Doc, Endpoint, ModelInfo, QType, Response, Tools } from './types';
 import { isError } from './types';
 import { briefOf, localStore, serverStore, titleOf, trimMedia, type HistoryRow, type HistoryStore } from './history';
-import { debounce, load, readDataURL, store, uid } from './util';
+import { load, readDataURL, store, uid } from './util';
 
-const MAX_PERSISTED_CTX = 40_000;
+const WIDE = 1100; // px: below this the sidebar collapses by itself
 
 class App {
   doc = $state<Doc>(blankDoc());
@@ -27,7 +27,11 @@ class App {
   theme = $state<'system' | 'light' | 'dark'>(load('dui.theme', 'system'));
   history = $state<HistoryRow[]>([]);
   historyId = $state<string | null>(null); // the past run on screen
-  historyOpen = $state<boolean>(load('dui.hist', typeof innerWidth === 'number' ? innerWidth >= 1100 : true));
+  /** the sidebar's width class: wide screens push the page aside, narrow ones float it over the page */
+  wide = $state(typeof innerWidth === 'number' ? innerWidth >= WIDE : true);
+  #histPref = $state<boolean>(load('dui.hist', true)); // what the user chose for wide screens
+  #histOverlay = $state(false); // narrow screens: open only while asked for
+  historyOpen = $derived(this.wide ? this.#histPref : this.#histOverlay);
   toastText = $state('');
 
   endpoint = $derived(this.endpoints.find((e) => e.id === this.endpointId) ?? null);
@@ -50,16 +54,14 @@ class App {
 
   // ── lifecycle ────────────────────────────────────────────────────────────────────────────────────────────────
   async init(): Promise<void> {
-    const saved = load<Partial<Doc> | null>('dui.doc', null);
-    if (saved?.questions?.length) this.doc = { ...blankDoc(), ...saved, media: [] };
     this.applyTheme();
+    try {
+      localStorage.removeItem('dui.doc'); // an old version restored the last document on load; every visit now starts blank
+    } catch {
+      /* storage unavailable */
+    }
     await this.refreshEndpoints();
   }
-
-  persist = debounce(() => {
-    const d = $state.snapshot(this.doc) as Doc;
-    store('dui.doc', { ...d, media: [], contexts: d.contexts.filter((c) => c.text.length < MAX_PERSISTED_CTX) });
-  }, 500);
 
   applyTheme(): void {
     const el = document.documentElement;
@@ -226,8 +228,16 @@ class App {
 
   // ── history ──────────────────────────────────────────────────────────────────────────────────────────────────
   toggleHistory(): void {
-    this.historyOpen = !this.historyOpen;
-    store('dui.hist', this.historyOpen);
+    if (this.wide) {
+      this.#histPref = !this.#histPref;
+      store('dui.hist', this.#histPref);
+    } else this.#histOverlay = !this.#histOverlay;
+  }
+  /** Called on every window resize: crossing into a narrow window collapses the sidebar, and widening restores the choice. */
+  setWidth(px: number): void {
+    const wide = px >= WIDE;
+    if (wide !== this.wide) this.#histOverlay = false;
+    this.wide = wide;
   }
   async refreshHistory(q = this.#query): Promise<void> {
     this.#query = q;

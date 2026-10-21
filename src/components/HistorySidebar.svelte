@@ -6,7 +6,6 @@
 
   let q = $state('');
   const search = debounce((v: string) => void app.refreshHistory(v), 250);
-  const narrow = () => innerWidth < 1100;
 
   const day = (t: number): string => {
     const d = new Date(t);
@@ -25,16 +24,17 @@
 
   function open(r: HistoryRow) {
     void app.openHistory(r.id);
-    if (narrow()) app.toggleHistory();
+    if (!app.wide) app.toggleHistory();
   }
 </script>
 
 {#if app.historyOpen}
-  {#if narrow()}<button class="scrim" aria-label="Close history" onclick={() => app.toggleHistory()}></button>{/if}
+  {#if !app.wide}<button class="scrim" aria-label="Close history" onclick={() => app.toggleHistory()}></button>{/if}
   <aside aria-label="History">
     <div class="top">
       <label class="find"><Icon name="search" size={15} /><input placeholder="Search" bind:value={q} oninput={() => search(q)} aria-label="Search history" /></label>
       <button class="new" title="New" aria-label="New question" onclick={() => app.newDoc()}><Icon name="plus" size={17} /></button>
+      <button class="new fold" title="Collapse" aria-label="Collapse history" onclick={() => app.toggleHistory()}><Icon name="chevron" size={17} /></button>
     </div>
 
     <div class="list">
@@ -70,6 +70,7 @@
   .find { flex: 1; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 10px; background: var(--sunken); color: var(--ink-3); }
   .find input { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); }
   .new { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: var(--ink-2); }
+  .fold :global(svg) { transform: rotate(-90deg); }
   .new:hover { background: var(--sunken); color: var(--accent); }
   .list { flex: 1; min-height: 0; overflow: auto; padding-right: 4px; }
   h3 { margin: 14px 8px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink-3); }

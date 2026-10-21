@@ -12,16 +12,9 @@
 
   onMount(() => void app.init());
 
-  // persist the document (media excluded) whenever anything that is saved changes
-  // the sidebar pushes the page aside on wide screens and floats over it on narrow ones
-  let wide = $state(innerWidth >= 1100);
+  // the sidebar pushes the page aside on wide screens (and collapses by itself on narrow ones)
   $effect(() => {
-    document.documentElement.style.setProperty('--hist', app.historyOpen && wide ? 'var(--hist-w)' : '0px');
-  });
-
-  $effect(() => {
-    JSON.stringify([app.doc.state, app.doc.stateMode, app.doc.questions, app.doc.contexts.map((c) => c.id), app.doc.extra]);
-    app.persist();
+    document.documentElement.style.setProperty('--hist', app.historyOpen && app.wide ? 'var(--hist-w)' : '0px');
   });
 
   function onkey(e: KeyboardEvent) {
@@ -32,7 +25,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onkey} onresize={() => (wide = innerWidth >= 1100)} />
+<svelte:window onkeydown={onkey} onresize={() => app.setWidth(innerWidth)} />
 
 <Header />
 

@@ -24,7 +24,8 @@ Decision models such as d3 don't chat. You send an input (text, JSON, images, vi
 - **Typed questions:** choice, yes / no and score, the System One standard. Answers show probabilities, and call out close calls, unsure answers and split scores.
 - **Multimodal input:** text or JSON, images and video, when the model reads them.
 - **Context:** attach files (PDF, Office, text, code) or search the web; the text goes into the input.
-- **History:** every run is saved in SQLite and listed on the right. Click one to bring the question and answers back.
+- **History:** every run is saved in SQLite and listed on the right. Click one to bring the question and answers back. The panel collapses by itself below 1100 px wide.
+- **A clean page every visit:** the app opens blank; past work is in the history, not restored behind your back.
 - **Any endpoint:** proxied by the bundled server (keys stay server-side), or called straight from the browser.
 - **Nothing hidden:** the exact request as editable JSON, plus curl, Python and JavaScript snippets.
 - **Extensions, opt-in:** box, track and tagged images, which only some models understand (see [Extensions](#extensions)).
