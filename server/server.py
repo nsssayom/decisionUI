@@ -220,6 +220,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(convert_bytes(data, name, mime)))
         except ValueError as e:
             return self._err(415, str(e))
+        except urllib.error.HTTPError as e:
+            try:
+                body = json.loads(e.read())
+                msg = body.get("error") if isinstance(body, dict) else None
+                msg = msg.get("message") if isinstance(msg, dict) else msg
+            except Exception:
+                msg = None
+            return self._err(422 if e.code == 422 else 502, msg or f"conversion failed (HTTP {e.code})")
         except Exception as e:
             return self._err(502, f"conversion failed: {e}")
 
