@@ -22,7 +22,10 @@
 </script>
 
 <header>
-  <div class="brand"><span class="mark" aria-hidden="true"></span><span><b>decision</b>UI</span></div>
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#5b5bf0" /><circle cx="49.5" cy="19.5" r="3.6" fill="#fff" fill-opacity="0.42" /><path d="M15.5 33L27 44.5L43.65 26" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    <span><b>decision</b>UI</span>
+  </div>
 
   <div class="menu" use:clickOutside={() => (open = false)}>
     <button class="pill" onclick={() => (open = !open)} aria-haspopup="true" aria-expanded={open}>
@@ -92,8 +95,7 @@
   }
   .brand { display: flex; align-items: center; gap: 9px; font-size: 15.5px; letter-spacing: -0.02em; margin-right: auto; white-space: nowrap; }
   .brand b { font-weight: 650; }
-  .mark { width: 22px; height: 22px; border-radius: 7px; background: var(--accent); position: relative; display: inline-block; }
-  .mark::after { content: ''; position: absolute; left: 6.6px; top: 4px; width: 6px; height: 10.5px; border: solid var(--accent-ink); border-width: 0 2.2px 2.2px 0; transform: rotate(40deg); }
+  .mark { width: 22px; height: 22px; flex: none; }
   .menu { position: relative; }
   .pill {
     display: flex; align-items: center; gap: 9px; max-width: min(56vw, 420px);
