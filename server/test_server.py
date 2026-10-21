@@ -118,6 +118,10 @@ class T(unittest.TestCase):
             self.assertEqual([r["title"] for r in json.loads(call(self.base + "/api/history?q=refund")[1])], ["Refund please"])
             full = json.loads(call(f"{self.base}/api/history/{rid}")[1])
             self.assertEqual(full["request"]["state"], "x"); self.assertEqual(full["response"]["answers"]["team"]["type"], "choice")
+            untitled = {**row, "t": 3000, "title": "Untitled", "brief": "q1: yes",
+                        "request": {"state": "", "images": ["data:x"], "questions": {"q1": {"type": "noul", "instructions": "Is there a ship?"}}}}
+            call(self.base + "/api/history", json.dumps(untitled).encode(), {"Content-Type": "application/json"})
+            self.assertEqual(json.loads(call(self.base + "/api/history")[1])[0]["title"], "Is there a ship?")   # old untitled rows are retitled
             self.assertEqual(call(self.base + "/api/history", b"{}", {"Content-Type": "application/json"})[0], 400)
             self.assertEqual(call(self.base + "/api/history/abc")[0], 404)
             self.assertEqual(call(f"{self.base}/api/history/{rid}", method="DELETE")[0], 200)

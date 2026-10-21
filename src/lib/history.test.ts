@@ -20,6 +20,10 @@ describe('history helpers', () => {
     expect(titleOf({ state: '  The order\n arrived   damaged. ' })).toBe('The order arrived damaged.');
     expect(titleOf({ state: { a: 1 } })).toBe('{"a":1}');
     expect(titleOf({ state: '' })).toBe('Untitled');
+    // no text: the first question says what the run was about, then what was attached
+    expect(titleOf({ state: '', images: ['data:x'], questions: { a: { instructions: ' ' }, b: { instructions: 'Is there a ship?' } } })).toBe('Is there a ship?');
+    expect(titleOf({ state: '', images: ['data:x'], questions: { a: { type: 'noul' } } })).toBe('Image');
+    expect(titleOf({ state: '', videos: ['data:y'], questions: {} })).toBe('Video');
     expect(titleOf({ state: 'x'.repeat(500) }).length).toBe(120);
   });
 

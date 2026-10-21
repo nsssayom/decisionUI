@@ -93,9 +93,12 @@ export function trimMedia(req: Record<string, unknown>, max: number): { request:
   return { request: r, cut };
 }
 
+/** A run's title: its input; or, for an image-only run, the first question; or what was attached. */
 export const titleOf = (req: Record<string, unknown>): string => {
-  const s = typeof req.state === 'string' ? req.state : JSON.stringify(req.state ?? '');
-  return s.replace(/\s+/g, ' ').trim().slice(0, 120) || 'Untitled';
+  const flat = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v)).replace(/\s+/g, ' ').trim();
+  const asked = Object.values((req.questions ?? {}) as Record<string, { instructions?: unknown }>).map((q) => flat(q?.instructions)).find(Boolean);
+  const kind = Array.isArray(req.videos) && req.videos.length ? 'Video' : req.images || req.assets ? 'Image' : '';
+  return (flat(req.state) || asked || kind || 'Untitled').slice(0, 120);
 };
 
 /** "team: returns · receipt: yes": the answers at a glance. */

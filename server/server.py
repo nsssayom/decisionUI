@@ -142,6 +142,14 @@ def load_key(spec):
     return spec
 
 
+def title_of(req):
+    """Mirror of titleOf() in src/lib/history.ts: the input, else the first question, else what was attached."""
+    flat = lambda v: " ".join((v if isinstance(v, str) else "" if v is None else json.dumps(v)).split())
+    asked = next((t for t in (flat(q.get("instructions")) for q in (req.get("questions") or {}).values() if isinstance(q, dict)) if t), "")
+    kind = "Video" if req.get("videos") else "Image" if req.get("images") or req.get("assets") else ""
+    return (flat(req.get("state")) or asked or kind or "Untitled")[:120]
+
+
 def db():
     """One short-lived connection per call: the server is threaded and SQLite connections are not shared."""
     path = Path(HISTORY["db"])
@@ -152,6 +160,9 @@ def db():
     con.execute("""CREATE TABLE IF NOT EXISTS runs (
         id INTEGER PRIMARY KEY AUTOINCREMENT, t INTEGER NOT NULL, endpoint TEXT, model TEXT, ms INTEGER,
         title TEXT, brief TEXT, media_cut INTEGER DEFAULT 0, request TEXT NOT NULL, response TEXT NOT NULL)""")
+    for rid, req in con.execute("SELECT id, request FROM runs WHERE title IN ('', 'Untitled')").fetchall():     # older rows saved without a title
+        with con:
+            con.execute("UPDATE runs SET title=? WHERE id=?", (title_of(json.loads(req)), rid))
     return con
 
 
