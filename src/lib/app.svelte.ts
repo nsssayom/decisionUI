@@ -3,24 +3,15 @@ import { blankDoc, buildRequest, fromRequest, newQuestion, RequestError } from '
 import { EXAMPLES, type Example } from './examples';
 import type { Caps, Doc, Endpoint, ModelInfo, QType, Response, Tools } from './types';
 import { isError } from './types';
-import { debounce, isDataUrl, load, readDataURL, store, uid } from './util';
-
-interface HistoryItem {
-  t: number;
-  endpoint?: string;
-  model?: string;
-  ms: number;
-  req: Record<string, unknown>;
-  mediaCut: boolean;
-  brief: string;
-}
+import { briefOf, localStore, serverStore, titleOf, trimMedia, type HistoryRow, type HistoryStore } from './history';
+import { debounce, load, readDataURL, store, uid } from './util';
 
 const MAX_PERSISTED_CTX = 40_000;
 
 class App {
   doc = $state<Doc>(blankDoc());
   endpoints = $state<Endpoint[]>([]);
-  tools = $state<Tools>({ convert: true, convertAll: false, search: false, read: false });
+  tools = $state<Tools>({ convert: true, convertAll: false, search: false, read: false, history: false });
   endpointId = $state<string>(load('dui.ep', ''));
   models = $state<ModelInfo[]>([]);
   /** per endpoint: has the user (or a rejected request) said its server knows the extensions? */
@@ -32,9 +23,11 @@ class App {
   result = $state<{ resp: Response; ms: number; req: string } | null>(null);
   error = $state('');
   qerrors = $state<Record<string, string>>({}); // question name → what the server said about it
-  drawer = $state<null | 'request' | 'code' | 'history'>(null);
+  drawer = $state<null | 'request' | 'code'>(null);
   theme = $state<'system' | 'light' | 'dark'>(load('dui.theme', 'system'));
-  history = $state<HistoryItem[]>(load('dui.history', []));
+  history = $state<HistoryRow[]>([]);
+  historyId = $state<string | null>(null); // the past run on screen
+  historyOpen = $state<boolean>(load('dui.hist', typeof innerWidth === 'number' ? innerWidth >= 1100 : true));
   toastText = $state('');
 
   endpoint = $derived(this.endpoints.find((e) => e.id === this.endpointId) ?? null);
@@ -49,6 +42,10 @@ class App {
   pristine = $derived(!this.doc.state.trim() && !this.doc.media.length && !this.doc.contexts.length);
 
   #abort: AbortController | null = null;
+  #query = '';
+  get #store(): HistoryStore {
+    return this.tools.history ? serverStore : localStore;
+  }
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ── lifecycle ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -87,6 +84,7 @@ class App {
     const { endpoints, tools } = await api.loadEndpoints();
     this.endpoints = endpoints;
     this.tools = tools;
+    void this.refreshHistory();
     if (!endpoints.some((e) => e.id === this.endpointId)) this.endpointId = endpoints[0]?.id ?? '';
     await this.loadModels();
   }
@@ -205,7 +203,8 @@ class App {
     try {
       const { data, ms } = await api.ask(this.endpoint, req, this.#abort.signal);
       this.result = { resp: data, ms, req: JSON.stringify(this.request) };
-      this.#remember(req, data, ms);
+      this.historyId = null;
+      void this.#remember(req, data, ms);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
         const err = e as api.ApiError;
@@ -225,20 +224,57 @@ class App {
     this.#abort?.abort();
   }
 
-  #remember(req: Record<string, unknown>, data: Response, ms: number): void {
-    let cut = false;
-    const strip = (v: unknown) => (isDataUrl(v) && v.length > 2000 ? ((cut = true), null) : v);
-    const r = JSON.parse(JSON.stringify(req));
-    for (const k of ['images', 'videos']) if (r[k]) r[k] = r[k].map(strip).filter(Boolean);
-    if (r.assets) r.assets = Object.fromEntries(Object.entries(r.assets).map(([k, v]) => [k, strip(v)]).filter(([, v]) => v));
-    const [name, a] = Object.entries(data.answers ?? {})[0] ?? [];
-    const brief = a ? `${name}: ${isError(a) ? 'error' : 'choice' in a ? a.choice : 'noul' in a ? (a.noul >= 0.5 ? 'yes' : 'no') : 'score' in a ? a.score.toFixed(2) : a.type}` : '';
-    this.history = [{ t: Date.now(), endpoint: this.endpoint?.name, model: this.model, ms: Math.round(ms), req: r, mediaCut: cut, brief }, ...this.history].slice(0, 30);
-    while (this.history.length && !store('dui.history', this.history)) this.history.pop();
+  // ── history ──────────────────────────────────────────────────────────────────────────────────────────────────
+  toggleHistory(): void {
+    this.historyOpen = !this.historyOpen;
+    store('dui.hist', this.historyOpen);
   }
-  clearHistory(): void {
-    this.history = [];
-    store('dui.history', []);
+  async refreshHistory(q = this.#query): Promise<void> {
+    this.#query = q;
+    try {
+      this.history = await this.#store.list(q);
+    } catch {
+      this.history = [];
+    }
+  }
+  async #remember(req: Record<string, unknown>, data: Response, ms: number): Promise<void> {
+    const { request, cut } = trimMedia(req, this.#store.maxMedia);
+    try {
+      await this.#store.add({ t: Date.now(), endpoint: this.endpoint?.name, model: this.model, ms: Math.round(ms), title: titleOf(request), brief: briefOf(data), mediaCut: cut, request, response: data });
+      await this.refreshHistory();
+      this.historyId = this.history[0]?.id ?? null;
+    } catch {
+      /* history is a convenience; a failed save must not fail the run */
+    }
+  }
+  /** Bring a past question and its answer back. */
+  async openHistory(id: string): Promise<void> {
+    const run = await this.#store.get(id);
+    if (!run) return void this.refreshHistory();
+    this.applyRequest(run.request);
+    this.result = { resp: run.response, ms: run.ms, req: JSON.stringify(this.request) };
+    this.error = '';
+    this.qerrors = {};
+    this.historyId = id;
+    if (run.mediaCut) this.toast('Large media was not kept');
+  }
+  async deleteHistory(id: string): Promise<void> {
+    await this.#store.remove(id).catch(() => {});
+    if (this.historyId === id) this.historyId = null;
+    await this.refreshHistory();
+  }
+  async clearHistory(): Promise<void> {
+    await this.#store.clear().catch(() => {});
+    this.historyId = null;
+    await this.refreshHistory();
+  }
+  /** A blank page for the next question. */
+  newDoc(): void {
+    this.doc = blankDoc();
+    this.result = null;
+    this.error = '';
+    this.qerrors = {};
+    this.historyId = null;
   }
 }
 

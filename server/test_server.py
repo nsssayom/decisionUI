@@ -102,6 +102,37 @@ class T(unittest.TestCase):
         finally:
             server.TOOLS.update(docs=None, docs_key=None, search=None)
 
+    def test_history_roundtrip(self):
+        server.HISTORY["db"] = os.path.join(tempfile.mkdtemp(), "sub", "h.db")           # created on first use
+        try:
+            self.assertEqual(json.loads(call(self.base + "/api/tools")[1])["history"], True)
+            self.assertEqual(json.loads(call(self.base + "/api/history")[1]), [])
+            row = {"t": 1000, "endpoint": "m", "model": "d3", "ms": 12, "title": "Refund please", "brief": "team: returns",
+                   "request": {"state": "x", "questions": {}}, "response": {"answers": {"team": {"type": "choice"}}}}
+            st, body, _ = call(self.base + "/api/history", json.dumps(row).encode(), {"Content-Type": "application/json"})
+            rid = json.loads(body)["id"]
+            call(self.base + "/api/history", json.dumps({**row, "t": 2000, "title": "Second"}).encode(), {"Content-Type": "application/json"})
+            rows = json.loads(call(self.base + "/api/history")[1])
+            self.assertEqual([r["title"] for r in rows], ["Second", "Refund please"])               # newest first
+            self.assertNotIn("request", rows[0])                                                      # the list is light
+            self.assertEqual([r["title"] for r in json.loads(call(self.base + "/api/history?q=refund")[1])], ["Refund please"])
+            full = json.loads(call(f"{self.base}/api/history/{rid}")[1])
+            self.assertEqual(full["request"]["state"], "x"); self.assertEqual(full["response"]["answers"]["team"]["type"], "choice")
+            self.assertEqual(call(self.base + "/api/history", b"{}", {"Content-Type": "application/json"})[0], 400)
+            self.assertEqual(call(self.base + "/api/history/abc")[0], 404)
+            self.assertEqual(call(f"{self.base}/api/history/{rid}", method="DELETE")[0], 200)
+            self.assertEqual(call(f"{self.base}/api/history/{rid}")[0], 404)
+            self.assertEqual(call(self.base + "/api/history", headers={"Origin": "http://evil.example"})[0], 403)
+            self.assertEqual(call(self.base + "/api/history", method="DELETE", headers={"Origin": "http://evil.example"})[0], 403)
+            self.assertEqual(call(self.base + "/api/history", method="DELETE")[0], 200)
+            self.assertEqual(json.loads(call(self.base + "/api/history")[1]), [])
+        finally:
+            server.HISTORY["db"] = None
+
+    def test_history_off(self):
+        self.assertEqual(call(self.base + "/api/history")[0], 501)
+        self.assertEqual(json.loads(call(self.base + "/api/tools")[1])["history"], False)
+
 
 if __name__ == "__main__":
     unittest.main()

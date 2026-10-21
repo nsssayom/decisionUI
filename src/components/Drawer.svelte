@@ -33,11 +33,11 @@
   async function copy() {
     try { await navigator.clipboard.writeText(code); app.toast('Copied'); } catch { app.toast('Copy failed'); }
   }
-  const tabs = [['request', 'Request'], ['code', 'Code'], ['history', 'History']] as const;
+  const tabs = [['request', 'Request'], ['code', 'Code']] as const;
 </script>
 
 {#if app.drawer}
-  <aside use:clickOutside={() => (app.drawer = null)} aria-label="Request, code and history">
+  <aside use:clickOutside={() => (app.drawer = null)} aria-label="Request and code">
     <header>
       <div class="tabs" role="tablist">
         {#each tabs as [id, label]}<button role="tab" aria-selected={app.drawer === id} class:on={app.drawer === id} onclick={() => (app.drawer = id)}>{label}</button>{/each}
@@ -54,17 +54,6 @@
         <button class="copy" onclick={copy}><Icon name="copy" size={15} />Copy</button>
       </div>
       <pre class="code">{code}</pre>
-    {:else}
-      <div class="hist">
-        {#if !app.history.length}<p class="empty">Nothing yet</p>{/if}
-        {#each app.history as h}
-          <button class="item" onclick={() => { app.applyRequest(h.req); if (h.mediaCut) app.toast('Media is not kept'); app.drawer = null; }}>
-            <b>{String(h.req.state).replace(/\s+/g, ' ').slice(0, 90) || '—'}</b>
-            <span>{h.brief} · {(h.ms / 1000).toFixed(2)} s · {new Date(h.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-          </button>
-        {/each}
-        {#if app.history.length}<button class="clear" onclick={() => app.clearHistory()}>Clear</button>{/if}
-      </div>
     {/if}
   </aside>
 {/if}
@@ -91,12 +80,4 @@
   .seg button.on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
   .copy { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 10px; font-size: 13.5px; color: var(--ink-2); border: 1px solid var(--line); }
   .copy:hover { background: var(--sunken); color: var(--ink); }
-  .hist { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
-  .empty { color: var(--ink-3); text-align: center; padding: 40px 0; margin: 0; }
-  .item { text-align: left; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
-  .item:hover { background: var(--sunken); }
-  .item b { font-weight: 550; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item span { color: var(--ink-3); font-size: 12.5px; }
-  .clear { align-self: center; margin-top: 6px; color: var(--ink-3); font-size: 13px; padding: 6px 12px; border-radius: 8px; }
-  .clear:hover { background: var(--sunken); color: var(--bad); }
 </style>

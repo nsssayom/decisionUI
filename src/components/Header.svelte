@@ -77,7 +77,8 @@
   </div>
 
   <div class="tools">
-    <button class="icon" aria-label="Request, code, history" title="Request · code · history" onclick={() => (app.drawer = app.drawer ? null : 'request')}><Icon name="braces" /></button>
+    <button class="icon" class:on={app.historyOpen} aria-label="History" title="History" aria-pressed={app.historyOpen} onclick={() => app.toggleHistory()}><Icon name="history" /></button>
+    <button class="icon" aria-label="Request and code" title="Request · code" onclick={() => (app.drawer = app.drawer ? null : 'request')}><Icon name="braces" /></button>
     <button class="icon" aria-label="Toggle theme" title="Theme" onclick={() => app.toggleTheme()}><Icon name={document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'sun' : 'moon'} /></button>
   </div>
 </header>
@@ -133,5 +134,6 @@
   .tools { display: flex; gap: 2px; }
   .icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--ink-2); }
   .icon:hover { background: var(--sunken); color: var(--ink); }
+  .icon.on { color: var(--accent); }
   @media (max-width: 520px) { .brand span:last-child { display: none; } .brand { margin-right: 0; } .menu { margin-right: auto; } }
 </style>

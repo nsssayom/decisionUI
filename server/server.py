@@ -16,11 +16,13 @@ browser (added in its Endpoints dialog); then this server only hosts the static 
   GET  /tools/search?q=&n=     web search through --search (a SearXNG base URL) → [{title, url, snippet}]
   GET  /tools/read?url=        fetch a public web page / file and convert it to text (private addresses are refused)
   GET  /health                 liveness
+  GET/POST/DELETE /api/history[/<id>]   past questions and answers, kept in SQLite (--db)
 
 --docs URL [--docs-key KEY|@FILE]   a document converter speaking `PUT /process` (raw bytes + X-Filename → [{page_content}])
 --search URL                        a SearXNG instance with the JSON format enabled
+--db FILE                           history database (default ~/.local/share/decisionui/history.db; `--db ''` turns history off)
 """
-import argparse, html.parser, ipaddress, json, mimetypes, os, socket, sys, threading, urllib.error, urllib.request
+import argparse, html.parser, ipaddress, json, mimetypes, os, socket, sqlite3, sys, threading, time, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
@@ -34,6 +36,9 @@ CSP = ("default-src 'self'; img-src 'self' data: blob: https: http:; media-src '
 ENDPOINTS = {}                           # name -> {"url": str, "key": str|None}
 TOOLS = {"docs": None, "docs_key": None, "search": None}
 LOCKS = {}
+HISTORY = {"db": None}                   # path of the SQLite file, or None when history is off
+HISTORY_KEEP = 500                       # newest rows kept
+MAX_ROW = 64 * 2**20
 TEXT_TYPES = ("text/", "application/json", "application/xml", "application/x-yaml", "application/toml",
               "application/javascript", "application/x-sh")
 TEXT_EXT = {".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".xml", ".log", ".ini",
@@ -137,6 +142,63 @@ def load_key(spec):
     return spec
 
 
+def db():
+    """One short-lived connection per call: the server is threaded and SQLite connections are not shared."""
+    path = Path(HISTORY["db"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(path, timeout=10)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("""CREATE TABLE IF NOT EXISTS runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, t INTEGER NOT NULL, endpoint TEXT, model TEXT, ms INTEGER,
+        title TEXT, brief TEXT, media_cut INTEGER DEFAULT 0, request TEXT NOT NULL, response TEXT NOT NULL)""")
+    return con
+
+
+def history_list(q=""):
+    with db() as con:
+        like = f"%{q.replace('%', '').replace('_', '')}%"
+        rows = con.execute("SELECT id, t, endpoint, model, ms, title, brief, media_cut FROM runs "
+                           "WHERE ?='%%' OR title LIKE ? OR brief LIKE ? ORDER BY t DESC, id DESC LIMIT 200", (like, like, like)).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
+
+def history_get(rid):
+    with db() as con:
+        r = con.execute("SELECT * FROM runs WHERE id=?", (rid,)).fetchone()
+    con.close()
+    if not r:
+        return None
+    d = dict(r)
+    d["request"], d["response"] = json.loads(d["request"]), json.loads(d["response"])
+    return d
+
+
+def history_add(d):
+    req, resp = d.get("request"), d.get("response")
+    if not isinstance(req, dict) or not isinstance(resp, dict):
+        raise ValueError("request and response must be objects")
+    with db() as con:
+        cur = con.execute("INSERT INTO runs (t, endpoint, model, ms, title, brief, media_cut, request, response) VALUES (?,?,?,?,?,?,?,?,?)",
+                          (int(d.get("t") or time.time() * 1000), str(d.get("endpoint") or "")[:200], str(d.get("model") or "")[:200],
+                           int(d.get("ms") or 0), str(d.get("title") or "")[:300], str(d.get("brief") or "")[:300], int(bool(d.get("mediaCut"))),
+                           json.dumps(req), json.dumps(resp)))
+        con.execute("DELETE FROM runs WHERE id NOT IN (SELECT id FROM runs ORDER BY t DESC, id DESC LIMIT ?)", (HISTORY_KEEP,))
+        rid = cur.lastrowid
+    con.close()
+    return rid
+
+
+def history_delete(rid=None):
+    con = db()
+    with con:
+        con.execute("DELETE FROM runs WHERE id=?", (rid,)) if rid is not None else con.execute("DELETE FROM runs")
+    if rid is None:
+        con.execute("VACUUM")                     # give the space of a cleared history back
+    con.close()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "decisionui"
     protocol_version = "HTTP/1.1"
@@ -182,7 +244,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._err(403, "forbidden")
         path = urlsplit(self.path).path
         if path == "/api/tools":
-            return self._send(200, json.dumps({"convert": True, "convertAll": bool(TOOLS["docs"]), "search": bool(TOOLS["search"]), "read": True}))
+            return self._send(200, json.dumps({"convert": True, "convertAll": bool(TOOLS["docs"]), "search": bool(TOOLS["search"]), "read": True, "history": bool(HISTORY["db"])}))
         if path == "/tools/search":
             return self._search(parts_q=urlsplit(self.path).query)
         if path == "/tools/read":
@@ -191,6 +253,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps([{"name": n, "url": e["url"], "key": bool(e["key"])} for n, e in ENDPOINTS.items()]))
         if path.startswith("/proxy/"):
             return self._proxy("GET")
+        if path.startswith("/api/history"):
+            return self._history("GET", path)
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
         f = (WEB / rel).resolve()
         if WEB not in f.parents or not f.is_file():
@@ -207,7 +271,42 @@ class Handler(BaseHTTPRequestHandler):
             return self._convert()
         if urlsplit(self.path).path.startswith("/proxy/"):
             return self._proxy("POST")
+        if urlsplit(self.path).path == "/api/history":
+            return self._history("POST", "/api/history")
         self._err(404, "not found")
+
+    def do_DELETE(self):
+        if not self._same_site():
+            return self._err(403, "forbidden")
+        path = urlsplit(self.path).path
+        if path.startswith("/api/history"):
+            return self._history("DELETE", path)
+        self._err(404, "not found")
+
+    def _history(self, method, path):
+        if not HISTORY["db"]:
+            return self._err(501, "history is off (start the server with --db FILE)")
+        rid = path[len("/api/history"):].strip("/")
+        if rid and not rid.isdigit():
+            return self._err(404, "not found")
+        try:
+            if method == "GET" and not rid:
+                from urllib.parse import parse_qs
+                return self._send(200, json.dumps(history_list((parse_qs(urlsplit(self.path).query).get("q") or [""])[0].strip())))
+            if method == "GET":
+                row = history_get(int(rid))
+                return self._send(200, json.dumps(row)) if row else self._err(404, "not found")
+            if method == "POST":
+                n = int(self.headers.get("Content-Length") or 0)
+                if n <= 0 or n > MAX_ROW:
+                    return self._err(413, "bad body size")
+                return self._send(200, json.dumps({"id": history_add(json.loads(self.rfile.read(n)))}))
+            history_delete(int(rid) if rid else None)
+            return self._send(200, '{"ok":true}')
+        except (ValueError, json.JSONDecodeError) as e:
+            return self._err(400, str(e))
+        except sqlite3.Error as e:
+            return self._err(500, f"history database error: {e}")
 
     def _convert(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -313,17 +412,21 @@ def main(argv=None):
     ap.add_argument("--docs", metavar="URL", help="document converter base URL (PUT /process)")
     ap.add_argument("--docs-key", metavar="KEY|@FILE", help="bearer token for the converter")
     ap.add_argument("--search", metavar="URL", help="SearXNG base URL (JSON format enabled)")
+    ap.add_argument("--db", default=os.environ.get("DECISIONUI_DB", str(Path.home() / ".local/share/decisionui/history.db")),
+                    metavar="FILE", help="history database ('' turns history off)")
     ap.add_argument("--allow-any-host", action="store_true", help="accept non-loopback Host headers (when you bind a LAN address)")
     a = ap.parse_args(argv)
     keys = dict(k.split("=", 1) for k in a.key)
     for e in a.endpoint:
         name, url = e.split("=", 1)
         ENDPOINTS[name] = {"url": url.rstrip("/"), "key": load_key(keys.get(name))}
+    HISTORY["db"] = a.db or None
     TOOLS.update(docs=a.docs, docs_key=load_key(a.docs_key), search=a.search)
     srv = Server((a.host, a.port), Handler)
     srv.allow_any_host = a.allow_any_host
     print(f"decisionUI on http://{a.host}:{a.port}  endpoints: {', '.join(ENDPOINTS) or 'none (direct mode only)'}"
-          f" · convert: {'docs' if TOOLS['docs'] else 'text only'} · search: {'on' if TOOLS['search'] else 'off'}", flush=True)
+          f" · convert: {'docs' if TOOLS['docs'] else 'text only'} · search: {'on' if TOOLS['search'] else 'off'}"
+          f" · history: {HISTORY['db'] or 'off'}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

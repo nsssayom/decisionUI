@@ -7,11 +7,18 @@
   import QuestionCard from './components/QuestionCard.svelte';
   import RunBar from './components/RunBar.svelte';
   import Drawer from './components/Drawer.svelte';
+  import HistorySidebar from './components/HistorySidebar.svelte';
   import Icon from './components/Icon.svelte';
 
   onMount(() => void app.init());
 
   // persist the document (media excluded) whenever anything that is saved changes
+  // the sidebar pushes the page aside on wide screens and floats over it on narrow ones
+  let wide = $state(innerWidth >= 1100);
+  $effect(() => {
+    document.documentElement.style.setProperty('--hist', app.historyOpen && wide ? 'var(--hist-w)' : '0px');
+  });
+
   $effect(() => {
     JSON.stringify([app.doc.state, app.doc.stateMode, app.doc.questions, app.doc.contexts.map((c) => c.id), app.doc.extra]);
     app.persist();
@@ -25,7 +32,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onkey} />
+<svelte:window onkeydown={onkey} onresize={() => (wide = innerWidth >= 1100)} />
 
 <Header />
 
@@ -46,6 +53,7 @@
 </main>
 
 <RunBar />
+<HistorySidebar />
 <Drawer />
 
 {#if app.toastText}
@@ -54,9 +62,11 @@
 
 <style>
   main {
-    max-width: 720px;
     margin: 0 auto;
     padding: 20px 20px 150px;
+    width: min(720px, calc(100% - var(--hist, 0px)));
+    position: relative;
+    left: calc(var(--hist, 0px) / -2); /* centred in the space the sidebar leaves */
     display: flex;
     flex-direction: column;
     gap: 14px;

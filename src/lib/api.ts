@@ -39,7 +39,7 @@ export const blamesExtension = (e: ApiError): boolean =>
   (e.status === 400 || e.status === 422) && /\b(box|track|assets|long_context)\b|extra (inputs|fields)|not permitted|forbidden|unknown field/i.test(`${e.message} ${Object.values(e.perQuestion).join(' ')}`) ||
   (e.status === 422 && Object.values(e.perQuestion).some((m) => /^type: Input should be/.test(m)));
 
-const NO_TOOLS: Tools = { convert: true, convertAll: false, search: false, read: false };
+const NO_TOOLS: Tools = { convert: true, convertAll: false, search: false, read: false, history: false };
 let proxied: Endpoint[] = [];
 let direct: Endpoint[] = load<Endpoint[]>('dui.direct', []);
 

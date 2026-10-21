@@ -9,6 +9,7 @@
 
 Decision models (d3, Clef, OpenJev, …) don't chat. You give them an input and questions, they return a probability for every option. decisionUI is a front end for that API, for any endpoint that speaks it.
 
+- **History:** every run is kept in SQLite and listed on the right. Click one to bring back the input, the questions and the answers. Without the server it falls back to the browser's storage.
 - **Question types:** choice, yes / no, score: the System One standard. **Extensions** (box, track, tagged images, long context) are d3-turbo features: flip *Extensions* in the endpoint menu only for a server that knows them. oMLX ignores them silently, strict servers reject them, so decisionUI never sends them otherwise.
 - **Input:** text or JSON, images, video, and named assets (`<tag>`) for questions and options
 - **Context:** drop in files (PDF, Office, text, code) or search the web; it lands in the input
@@ -31,6 +32,7 @@ Open <http://127.0.0.1:8890>. The server is Python 3, standard library only.
 | `--key NAME=KEY` or `NAME=@FILE` | Bearer key for that endpoint |
 | `--docs URL [--docs-key]` | Document converter (`PUT /process`) for PDF, Office, … Text, CSV, JSON and HTML work without it |
 | `--search URL` | A [SearXNG](https://github.com/searxng/searxng) instance (JSON format on) |
+| `--db FILE` | History database, SQLite (default `~/.local/share/decisionui/history.db`; `''` turns history off) |
 | `--host`, `--port` | Default `127.0.0.1:8890` |
 
 Without the server, host `dist/` anywhere and add an endpoint in the app. It is called from the browser, so it must allow CORS. File conversion and web search need the server.

@@ -108,4 +108,5 @@ export interface Tools {
   convertAll: boolean; // a document converter (PDF, Office, …) is configured
   search: boolean;
   read: boolean;
+  history: boolean; // the server keeps past runs in SQLite
 }

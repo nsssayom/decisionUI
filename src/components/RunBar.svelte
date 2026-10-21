@@ -30,7 +30,7 @@
 
 <style>
   .bar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: fixed; left: 0; right: var(--hist, 0px); bottom: 0; z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 10px;
     padding: 28px 16px calc(18px + env(safe-area-inset-bottom)); pointer-events: none;
     background: linear-gradient(to top, var(--bg) 35%, transparent);
   }

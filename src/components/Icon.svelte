@@ -1,7 +1,7 @@
 <script lang="ts">
   export type IconName =
     | 'attach' | 'globe' | 'braces' | 'sun' | 'moon' | 'plus' | 'x' | 'tag' | 'check' | 'chevron' | 'search' | 'link'
-    | 'copy' | 'trash' | 'choice' | 'noul' | 'score' | 'box' | 'track' | 'file' | 'play' | 'stop' | 'arrow';
+    | 'copy' | 'trash' | 'choice' | 'noul' | 'score' | 'box' | 'track' | 'file' | 'play' | 'stop' | 'arrow' | 'history';
   let { name, size = 18 }: { name: IconName; size?: number } = $props();
 
   // 24×24 stroke icons
@@ -29,6 +29,7 @@
     play: 'M7 4.5v15l12-7.5z',
     stop: 'M6 6h12v12H6z',
     arrow: 'M5 12h14M13 6l6 6-6 6',
+    history: 'M12 7v5l3.5 2M3.5 12a8.5 8.5 0 108.5-8.5A8.4 8.4 0 005.8 6M3.5 4v3.5H7',
   };
 </script>
 
