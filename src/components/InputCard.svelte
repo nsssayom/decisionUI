@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { app, EXAMPLES } from '../lib/app.svelte';
+  import { app } from '../lib/app.svelte';
   import { autosize } from '../lib/actions';
   import { bytes } from '../lib/util';
   import { normTag } from '../lib/request';
@@ -102,11 +102,6 @@
       <button class="icon" class:on={web} title="Web" aria-label="Web search" onclick={() => (web = !web)} disabled={!app.tools.search && !app.tools.read}><Icon name="globe" /></button>
       <button class="icon" class:on={isJson} title="JSON" aria-label="JSON input" onclick={toggleJson}><Icon name="braces" /></button>
     </div>
-    {#if app.pristine}
-      <div class="examples">
-        {#each EXAMPLES.filter((x) => !x.ext || app.caps.ext) as ex}<button onclick={() => app.loadExample(ex)}>{ex.name}</button>{/each}
-      </div>
-    {/if}
   </div>
   <input type="file" multiple hidden bind:this={picker} onchange={(e) => { void app.attach([...(e.currentTarget.files ?? [])]); e.currentTarget.value = ''; }} />
 
@@ -142,8 +137,5 @@
   .icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--ink-3); transition: background 0.12s, color 0.12s; }
   .icon:hover:not(:disabled) { background: var(--sunken); color: var(--ink); }
   .icon.on { background: var(--accent-soft); color: var(--accent); }
-  .examples { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-  .examples button { font-size: 13px; padding: 4px 11px; border-radius: 99px; color: var(--ink-2); background: var(--sunken); transition: background 0.12s, color 0.12s; }
-  .examples button:hover { background: var(--accent-soft); color: var(--accent); }
   .drop { position: absolute; inset: 0; border-radius: var(--r); display: grid; place-items: center; background: color-mix(in srgb, var(--accent-soft) 90%, transparent); color: var(--accent); font-weight: 600; border: 2px dashed var(--accent); pointer-events: none; }
 </style>

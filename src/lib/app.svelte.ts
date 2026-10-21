@@ -1,6 +1,5 @@
 import * as api from './api';
 import { blankDoc, buildRequest, fromRequest, newQuestion, RequestError } from './request';
-import { EXAMPLES, type Example } from './examples';
 import type { Caps, Doc, Endpoint, ModelInfo, QType, Response, Tools } from './types';
 import { isError } from './types';
 import { briefOf, localStore, serverStore, titleOf, trimMedia, type HistoryRow, type HistoryStore } from './history';
@@ -43,7 +42,6 @@ class App {
   });
   request = $derived(buildRequest(this.doc, this.model, false, this.caps));
   stale = $derived(this.result ? JSON.stringify(this.request) !== this.result.req : false);
-  pristine = $derived(!this.doc.state.trim() && !this.doc.media.length && !this.doc.contexts.length);
 
   #abort: AbortController | null = null;
   #query = '';
@@ -142,12 +140,6 @@ class App {
   }
 
   // ── document ─────────────────────────────────────────────────────────────────────────────────────────────────
-  loadExample(ex: Example): void {
-    this.doc = ex.build();
-    this.result = null;
-    this.error = '';
-    this.qerrors = {};
-  }
   addQuestion(type: QType): void {
     const n = Math.max(0, ...this.doc.questions.map((q) => Number(/^q(\d+)$/.exec(q.name)?.[1]) || 0)) + 1;
     this.doc.questions.push(newQuestion(type, n));
@@ -289,4 +281,3 @@ class App {
 }
 
 export const app = new App();
-export { EXAMPLES };
